@@ -15,11 +15,6 @@ import (
 
 type Inputs map[string]any
 
-type FileData struct {
-	ID   string
-	Name string
-}
-
 func main() {
 	r := chi.NewRouter()
 
@@ -35,18 +30,25 @@ func main() {
 		r.Get("/about", golte.Page("page/about"))
 	})
 
-	r.Route("/{fileId}", func(r chi.Router) {
+	/*r.Route("/{fileId}", func(r chi.Router) {
 
 		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 			filename := chi.URLParam(r, "fileId")
+			filePath := "./static/" + filename // Assuming files are in the current directory
+			if _, err := os.Stat(filePath); os.IsNotExist(err) {
+				// If the file does not exist, bypass this handler
+				http.NotFound(w, r)
+				return
+			}
 			golte.RenderPage(w, r, "page/view", Inputs{
 				"name": filename,
+				"type": mime.TypeByExtension(filename),
 			})
 		})
-		r.Get("/edit", golte.Page("page/edit"))
+		
 		r.Get("/delete", golte.Page("page/delete"))
 
-	})
+	})*/
 
 	r.Route("/raw/{fileId}", func(r chi.Router) {
 		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
@@ -56,7 +58,7 @@ func main() {
 			if err != nil {
 				if os.IsNotExist(err) {
 					w.WriteHeader(http.StatusNotFound)
-					golte.RenderPage(w, r, "page/404", nil)
+					golte.RenderPage(w, r, "page/notfound", nil)
 					return
 				}
 				http.Error(w, err.Error(), http.StatusInternalServerError)

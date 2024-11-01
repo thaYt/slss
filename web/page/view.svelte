@@ -1,21 +1,14 @@
 <script>
-    import Plyr from "plyr";
-
-    const player = new Plyr("#player");
-    export let fileId;
-
-    function logEvent(event) {
-        console.log(event);
-    }
+    export let name;
 </script>
 
-<div class="youtube-plyr">
-    <button on:click={() => player.play()}>PLAY</button>
-    <button on:click={() => player.pause()}>PAUSE</button>
-</div>
+<!-- svelte-ignore a11y-media-has-caption -->
+<video controls id="video">
+    <source src={"http://localhost:8000/raw/" + name} type="video/mp4">
+</video>
 
 <style>
-    .youtube-plyr {
-        max-width: 800px;
+    #video {
+        height: 60%;
     }
 </style>

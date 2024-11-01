@@ -1,0 +1,2 @@
+- Golte restrictions:
+    - use new video player like vime or plyr (does not compile)
