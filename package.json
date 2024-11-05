@@ -2,7 +2,9 @@
   "name": "slss",
   "version": "1.0.0",
   "scripts": {
-    "dev": "golte dev && go build",
+    "dev": "yarn build:db && golte dev && go build -v",
+    "build": "yarn build:db && golte prod && go build -v",
+    "build:db": "cd sql && sqlc generate",
     "clean": "trash build"
   },
   "author": "core",
@@ -10,10 +12,14 @@
   "license": "MPL-2.0",
   "description": "",
   "dependencies": {
-    "golte": "^0.1.1"
+    "@sveltejs/vite-plugin-svelte": "^4.0.0",
+    "bytes": "^3.1.2",
+    "golte": "^0.1.1",
+    "svelte-aplayer": "^0.1.2"
   },
   "devDependencies": {
     "@tsconfig/svelte": "^5.0.4",
+    "sass": "^1.80.6",
     "svelte": "^4.2.19",
     "svelte-check": "^4.0.5",
     "svelte-preprocess": "^6.0.3",

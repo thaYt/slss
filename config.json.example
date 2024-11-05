@@ -1,0 +1,7 @@
+{
+    "current_site": "localhost",
+    "default_admin_password": "admin",
+    "db_path": "./slss.db",
+    "storage_path": "./static",
+    "port": 8000
+}

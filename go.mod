@@ -1,9 +1,12 @@
 module slss
 
-go 1.22.7
+go 1.23.2
 
 require (
+	github.com/gabriel-vasile/mimetype v1.4.6
 	github.com/go-chi/chi/v5 v5.1.0
+	github.com/google/uuid v1.6.0
+	github.com/mattn/go-sqlite3 v1.14.24
 	github.com/nichady/golte v0.1.1
 )
 
@@ -16,4 +19,3 @@ require (
 	golang.org/x/net v0.30.0 // indirect
 	golang.org/x/text v0.19.0 // indirect
 )
-
