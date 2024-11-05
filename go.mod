@@ -6,6 +6,7 @@ require (
 	github.com/gabriel-vasile/mimetype v1.4.6
 	github.com/go-chi/chi/v5 v5.1.0
 	github.com/google/uuid v1.6.0
+	github.com/gtuk/discordwebhook v1.2.0
 	github.com/mattn/go-sqlite3 v1.14.24
 	github.com/nichady/golte v0.1.1
 )

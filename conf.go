@@ -9,11 +9,19 @@ import (
 )
 
 type conf struct {
-	CurrentSite          string `json:"current_site"`
-	DefaultAdminPassword string `json:"default_admin_password"`
-	DbPath               string `json:"db_path"`
-	StoragePath          string `json:"storage_path"`
-	Port                 int    `json:"port"`
+	CurrentSite          string  `json:"current_site"`
+	DefaultAdminPassword string  `json:"default_admin_password"`
+	DbPath               string  `json:"db_path"`
+	StoragePath          string  `json:"storage_path"`
+	Port                 int     `json:"port"`
+	Webhook              Webhook `json:"webhook"`
+}
+
+type Webhook struct {
+	Url       string `json:"url"`
+	Username  string `json:"username"`
+	Enabled   bool   `json:"enabled"`
+	AvatarUrl string `json:"avatar_url"`
 }
 
 var config conf
@@ -25,6 +33,9 @@ func init() {
 		DbPath:               "./slss.db",
 		StoragePath:          "./static",
 		Port:                 8000,
+		Webhook: Webhook{
+			Enabled: false,
+		},
 	}
 
 	file, err := os.ReadFile("config.json")

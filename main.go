@@ -6,11 +6,13 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gabriel-vasile/mimetype"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/gtuk/discordwebhook"
 	"github.com/nichady/golte"
 
 	"slss/build"
@@ -51,7 +53,7 @@ func main() {
 			golte.RenderPage(w, r, "page/home", Inputs{
 				"files": localFiles,
 			})*/
-            http.Redirect(w, r, "https://github.com/thayt/slss", http.StatusSeeOther)
+			http.Redirect(w, r, "https://github.com/thayt/slss", http.StatusSeeOther)
 		})
 
 		r.Route("/upload", func(r chi.Router) {
@@ -164,22 +166,74 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	url := config.CurrentSite + "/" + handler.Filename
+
 	// send json response
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(uploadResponse{
-		URL:       fmt.Sprintf("%s/%s", config.CurrentSite, handler.Filename),
-		DeleteURL: fmt.Sprintf("%s/%s/delete", config.CurrentSite, handler.Filename),
+		URL:       url,
+		DeleteURL: url + "/delete",
 	})
 
-	filetype, _ := mimetype.DetectReader(f)
+	filetype, err := mimetype.DetectFile("./static/" + handler.Filename)
+	if err != nil {
+		fmt.Println("Error detecting filetype:", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(failureResponse{Error: "Error detecting filetype"})
+		return
+	}
+	ftype := filetype.String()
+	if filetype.Extension() == "wav" {
+		ftype = "audio/wav"
+	}
 
 	createFile(database.File{
 		Alias:    handler.Filename,
 		Path:     handler.Filename,
-		Filetype: filetype.String(),
+		Filetype: ftype,
 		Filesize: handler.Size,
 		UserID:   user.ID,
 	})
+
+	if config.Webhook.Enabled {
+		content := fmt.Sprintf("New file uploaded: %s", handler.Filename)
+
+		bytesize := ByteCountIEC(handler.Size)
+
+		// weird webhook system idk man
+		nameStr := "User"
+		sizeStr := "Filesize"
+		typeStr := "Filetype"
+
+		message := discordwebhook.Embed{
+			Title: &content,
+			Url:   &url,
+			Fields: &[]discordwebhook.Field{
+				{
+					Name:  &nameStr,
+					Value: &user.Username,
+				},
+				{
+					Name:  &sizeStr,
+					Value: &ftype,
+				},
+				{
+					Name:  &typeStr,
+					Value: &bytesize,
+				},
+			},
+		}
+
+		if strings.HasPrefix(filetype.String(), "image") {
+			message.Image = &discordwebhook.Image{
+				Url: &url,
+			}
+		}
+
+		if err := discordwebhook.SendMessage(config.Webhook.Url, discordwebhook.Message{Embeds: &[]discordwebhook.Embed{message}}); err != nil {
+			fmt.Println("Error sending webhook:", err)
+		}
+	}
 }
 
 type uploadResponse struct {
@@ -189,4 +243,18 @@ type uploadResponse struct {
 
 type failureResponse struct {
 	Error string `json:"error"`
+}
+
+func ByteCountIEC(b int64) string {
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+	div, exp := int64(unit), 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %ciB",
+		float64(b)/float64(div), "KMGTPE"[exp])
 }
