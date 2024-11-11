@@ -15,5 +15,6 @@ CREATE TABLE IF NOT EXISTS files (
     user_id INTEGER NOT NULL,
     filesize INTEGER NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleteToken VARCHAR(255) NOT NULL,
     FOREIGN KEY (user_id) REFERENCES users(id)
 );

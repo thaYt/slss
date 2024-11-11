@@ -1,4 +1,4 @@
-package wordgen
+package sharex
 
 import (
 	_ "embed"
@@ -18,12 +18,21 @@ var adjectives string
 //go:embed noun-list
 var nouns string
 
-func GenPhrase() string {
+func GenPhrase(currentFiles []string) string {
 	adj := strings.Split(adjectives, "\n")
 	noun := strings.Split(nouns, "\n")
 
-	arand := rand.IntN(len(adj))
-	nrand := rand.IntN(len(noun))
-
-	return adj[arand] + "-" + noun[nrand]
+	var notExists bool
+	var phrase string
+	for !notExists {
+		phrase = adj[rand.IntN(len(adj))] + "-" + noun[rand.IntN(len(noun))]
+		notExists = true
+		for _, f := range currentFiles {
+			if f == phrase {
+				notExists = false
+				break
+			}
+		}
+	}
+	return phrase
 }

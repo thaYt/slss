@@ -58,11 +58,12 @@ INSERT INTO files
     path,
     user_id,
     filetype,
-    filesize
+    filesize,
+    deleteToken
     )
 VALUES
     (
-        ?, ?, ?, ?, ?
+        ?, ?, ?, ?, ?, ?
     )
 RETURNING *;
 

@@ -1,0 +1,41 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "type": "object",
+    "properties": {
+        "current_site": {
+            "type": "string"
+        },
+        "default_admin_password": {
+            "type": "string"
+        },
+        "db_path": {
+            "type": "string"
+        },
+        "storage_path": {
+            "type": "string"
+        },
+        "port": {
+            "type": "integer"
+        },
+        "webhook": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "url": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                },
+                "avatar_url": {
+                    "type": "string"
+                }
+            },
+            "required": ["enabled"]
+        }
+    },
+    "required": ["current_site", "default_admin_password", "db_path", "storage_path", "port", "webhook"]
+
+}

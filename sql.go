@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	_ "embed"
+	"slss/sharex"
 	database "slss/sql"
 
 	"github.com/gabriel-vasile/mimetype"
@@ -18,6 +19,10 @@ import (
 
 //go:embed sql/schema.sql
 var ddl string
+
+func GenConfig(user database.User) string {
+	return sharex.GenConfig(config.CurrentSite, user.Token)
+}
 
 var (
 	db      *sql.DB
@@ -64,11 +69,11 @@ func fillFromSql() {
 	localUsers = users
 }
 
-func fillToSql() {
+func fillToSql() error {
 	// check if files are in the database
 	dbFiles, err := GetFiles()
 	if err != nil {
-		return
+		return err
 	}
 	for _, file := range localFiles {
 		inc := false
@@ -84,6 +89,25 @@ func fillToSql() {
 			break
 		}
 	}
+	dbUsers, err := listUsers()
+	if err != nil {
+		return err
+	}
+	for _, user := range localUsers {
+		inc := false
+		for _, dbUser := range dbUsers {
+			if user.Username == dbUser.Username {
+				inc = true
+				break
+			}
+
+			createUser(user)
+		}
+		if inc {
+			break
+		}
+	}
+	return nil
 }
 
 func closeSqlite() {
@@ -101,11 +125,12 @@ func GetFiles() ([]database.File, error) {
 
 func createFile(file database.File) error {
 	file, err := queries.CreateFile(ctx, database.CreateFileParams{
-		Alias:    file.Alias,
-		Path:     file.Path,
-		Filetype: file.Filetype,
-		Filesize: file.Filesize,
-		UserID:   file.UserID,
+		Alias:       file.Alias,
+		Path:        file.Path,
+		Filetype:    file.Filetype,
+		Filesize:    file.Filesize,
+		UserID:      file.UserID,
+		Deletetoken: uuid.NewString(),
 	})
 	if err != nil {
 		return err
@@ -153,7 +178,7 @@ func createUser(user database.User) error {
 	return nil
 }
 
-func initUser() {
+func initAdmin() {
 	if len(localUsers) == 0 {
 		newUuid := uuid.NewString()
 		fmt.Println("Generated UUID for admin user:", newUuid)
@@ -163,19 +188,28 @@ func initUser() {
 			Token:    newUuid,
 		}
 
-		localUsers = append(localUsers, admin)
-
 		createUser(admin)
 	}
 }
 
 func getUserByToken(token string) (database.User, error) {
-	user, err := queries.GetUserByToken(ctx, token)
-	if err != nil {
-		return database.User{}, err
+	for _, user := range localUsers {
+		if user.Token == token {
+			return user, nil
+		}
 	}
 
-	return user, nil
+	return database.User{}, nil
+}
+
+func getUserByUsername(username string) (database.User, error) {
+	for _, user := range localUsers {
+		if user.Username == username {
+			return user, nil
+		}
+	}
+
+	return database.User{}, nil
 }
 
 func getFileByAlias(alias string) (database.File, error) {

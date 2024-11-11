@@ -4,18 +4,24 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"net/url"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/gabriel-vasile/mimetype"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/google/uuid"
 	"github.com/gtuk/discordwebhook"
 	"github.com/nichady/golte"
 
 	"slss/build"
+	"slss/sharex"
 	database "slss/sql"
 )
 
@@ -29,7 +35,7 @@ func main() {
 	startTime := time.Now().UnixMilli()
 
 	if err := initSqlite(); err != nil {
-		fmt.Println("Error initializing sqlite:", err)
+		log.Println("Error initializing sqlite:", err)
 		return
 	}
 	defer closeSqlite()
@@ -37,11 +43,10 @@ func main() {
 	fillFromSql()
 	fillStaticFiles()
 
-	initUser()
+	initAdmin()
 
 	r := chi.NewRouter()
 
-	// register the main Golte middleware
 	r.Use(build.Golte)
 	r.Use(middleware.Logger)
 
@@ -56,6 +61,46 @@ func main() {
 			http.Redirect(w, r, "https://github.com/thayt/slss", http.StatusSeeOther)
 		})
 
+		r.Route("/login", func(r chi.Router) {
+			r.Get("/", golte.Page("page/login"))
+			r.Post("/", handleLogin)
+		})
+
+		r.Get("/sharex-config", func(w http.ResponseWriter, r *http.Request) {
+			auth, err := r.Cookie("slss_token")
+			if err != nil {
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+			user, err := getUserByToken(auth.Value)
+			if err != nil || user.ID == 0 {
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(GenConfig(user)))
+		})
+
+		r.Route("/dashboard", func(r chi.Router) {
+			r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+				auth, err := r.Cookie("slss_token")
+				if err != nil {
+					http.Redirect(w, r, "/login", http.StatusSeeOther)
+					return
+				}
+				user, err := getUserByToken(auth.Value)
+				if err != nil || user.ID == 0 {
+					http.Redirect(w, r, "/login", http.StatusSeeOther)
+					return
+				}
+
+				golte.RenderPage(w, r, "page/dashboard", Inputs{
+					"user": user,
+				})
+			})
+		})
+
 		r.Route("/upload", func(r chi.Router) {
 			r.Post("/", handleUpload)
 		})
@@ -64,7 +109,8 @@ func main() {
 			r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 				fileName := chi.URLParam(r, "fileId")
 				file, err := getFileByAlias(fileName)
-				if err != nil {
+				if err != nil || file.ID == 0 {
+					w.WriteHeader(http.StatusNotFound)
 					golte.RenderPage(w, r, "page/notfound", nil)
 					return
 				}
@@ -76,7 +122,7 @@ func main() {
 
 			r.Route("/raw", func(r chi.Router) {
 				r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-					file, err := getFileByPathname(chi.URLParam(r, "fileId"))
+					file, err := getFileByAlias(chi.URLParam(r, "fileId"))
 					if err != nil {
 						golte.RenderPage(w, r, "page/notfound", nil)
 						return
@@ -105,6 +151,21 @@ func main() {
 					return
 				}
 
+				// get token from url param
+				reqUrl, err := url.Parse(r.URL.String())
+				if err != nil {
+					http.Error(w, "What", http.StatusBadRequest)
+					return
+				}
+				token := reqUrl.Query().Get("token")
+
+				auth := r.Header.Get("Authorization")
+				user, err := getUserByToken(auth)
+				if err != nil || (user.ID != file.UserID && user.ID != 1) || token != file.Deletetoken {
+					http.Error(w, "Unauthorized", http.StatusUnauthorized)
+					return
+				}
+
 				err = deleteFile(file.ID)
 				if err != nil {
 					golte.RenderPage(w, r, "page/notfound", nil)
@@ -123,12 +184,21 @@ func main() {
 		IdleTimeout:  15 * time.Second,
 	}
 
-	fmt.Println("Setup took", time.Now().UnixMilli()-startTime, "ms")
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	log.Println("Setup took", time.Now().UnixMilli()-startTime, "ms")
+	log.Println("Server is running on port", config.Port)
+	go func() {
+		if err := server.ListenAndServe(); err != nil {
+			log.Fatal(err)
+		}
+	}()
 
-	fmt.Println("Server is running on port", config.Port)
-	if err := server.ListenAndServe(); err != nil {
-		fmt.Println("Server error:", err)
-	}
+	// on program exit
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	<-c
+	log.Println("Shutting down server...")
+	fillToSql()
 }
 
 func handleUpload(w http.ResponseWriter, r *http.Request) {
@@ -136,7 +206,7 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 
 	authToken := r.Header.Get("Authorization")
 	user, err := getUserByToken(authToken)
-	if err != nil {
+	if err != nil || user.ID == 0 {
 		w.WriteHeader(http.StatusUnauthorized)
 		json.NewEncoder(w).Encode(failureResponse{Error: "Unauthorized"})
 		return
@@ -168,16 +238,17 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 
 	url := config.CurrentSite + "/" + handler.Filename
 
+	deleteToken := uuid.New().String()
 	// send json response
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(uploadResponse{
 		URL:       url,
-		DeleteURL: url + "/delete",
+		DeleteURL: url + "/delete?token=" + deleteToken,
 	})
 
 	filetype, err := mimetype.DetectFile("./static/" + handler.Filename)
 	if err != nil {
-		fmt.Println("Error detecting filetype:", err)
+		log.Println("Error detecting filetype:", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(failureResponse{Error: "Error detecting filetype"})
 		return
@@ -187,12 +258,15 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 		ftype = "audio/wav"
 	}
 
+	newAlias := sharex.GenPhrase(allAlias())
+
 	createFile(database.File{
-		Alias:    handler.Filename,
-		Path:     handler.Filename,
-		Filetype: ftype,
-		Filesize: handler.Size,
-		UserID:   user.ID,
+		Alias:       newAlias,
+		Path:        handler.Filename,
+		Filetype:    ftype,
+		Filesize:    handler.Size,
+		UserID:      user.ID,
+		Deletetoken: deleteToken,
 	})
 
 	if config.Webhook.Enabled {
@@ -204,6 +278,7 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 		nameStr := "User"
 		sizeStr := "Filesize"
 		typeStr := "Filetype"
+		delUrl := "[Delete](" + (config.CurrentSite + "/" + newAlias + "/delete?token=" + deleteToken) + ")"
 
 		message := discordwebhook.Embed{
 			Title: &content,
@@ -214,13 +289,19 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 					Value: &user.Username,
 				},
 				{
-					Name:  &sizeStr,
+					Name:  &typeStr,
 					Value: &ftype,
 				},
 				{
-					Name:  &typeStr,
+					Name:  &sizeStr,
 					Value: &bytesize,
 				},
+				{
+					Name: &delUrl,
+				},
+			},
+			Footer: &discordwebhook.Footer{
+				Text: &config.CurrentSite,
 			},
 		}
 
@@ -231,9 +312,53 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if err := discordwebhook.SendMessage(config.Webhook.Url, discordwebhook.Message{Embeds: &[]discordwebhook.Embed{message}}); err != nil {
-			fmt.Println("Error sending webhook:", err)
+			log.Println("Error sending webhook:", err)
 		}
 	}
+}
+
+func handleLogin(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	// post is in json
+	var login struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+
+	err := json.NewDecoder(r.Body).Decode(&login)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(failureResponse{Error: "Invalid request"})
+		return
+	}
+	log.Println("decoded login:", login)
+
+	user, err := getUserByUsername(login.Username)
+	if err != nil || user.ID == 0 || user.Password != login.Password {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(failureResponse{Error: "Unauthorized"})
+		return
+	}
+
+	// put token in user cookies
+	http.SetCookie(w, &http.Cookie{
+		Name:     "slss_token",
+		Value:    user.Token,
+		Expires:  time.Now().Add(24 * time.Hour),
+		SameSite: http.SameSiteStrictMode,
+	})
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"success":true}`))
+}
+
+func allAlias() []string {
+	var names []string
+	for _, file := range localFiles {
+		names = append(names, file.Alias)
+	}
+	return names
 }
 
 type uploadResponse struct {
