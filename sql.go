@@ -143,6 +143,7 @@ func createFile(file database.File) error {
 func deleteFile(id int64) error {
 	for i, file := range localFiles {
 		if file.ID == id {
+			os.Remove(filepath.Join(config.StoragePath, "./static/" + file.Alias))
 			localFiles = append(localFiles[:i], localFiles[i+1:]...)
 			err := queries.DeleteFile(ctx, id)
 			if err != nil {

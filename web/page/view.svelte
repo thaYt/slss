@@ -3,10 +3,12 @@
     import { onMount } from "svelte";
 
     export let file;
+    export let site;
 
-    let name = file.Path;
+    let name = file.Alias;
     let type = file.Filetype;
     let size = file.Filesize;
+    let originalName = file.Path;
     let src = name + "/raw";
 
     onMount(() => {
@@ -18,13 +20,17 @@
     <meta name="theme-color" content="#8800aa" />
     <meta property="og:title" content={name} />
     <meta property="og:description" content="{type} - {bytes.format(size)}" />
-    {#if type.startsWith("image") || type.startsWith("video")}
-        <meta property="og:image" content={src} />
+    {#if type.startsWith("image")}
+        <meta property="og:type" content="image" />
+        <meta property="og:image" content={site + "/" + src} />
+    {:else if type.startsWith("video")}
+        <meta property="og:type" content="video" />
+        <meta property="og:image" content={site + "/" + src} />
     {/if}
 </svelte:head>
 
 <div class="panel">
-    <h1 id="name">{name}</h1>
+    <h1 id="name">{name} ({originalName})</h1>
     <p>{bytes.format(size)}</p>
     {#if type.startsWith("image")}
         <img {src} alt={name} class="responsive-media" />

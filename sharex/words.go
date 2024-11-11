@@ -18,10 +18,12 @@ var adjectives string
 //go:embed noun-list
 var nouns string
 
-func GenPhrase(currentFiles []string) string {
-	adj := strings.Split(adjectives, "\n")
-	noun := strings.Split(nouns, "\n")
+var (
+	adj = strings.Split(adjectives, "\n")
+	noun = strings.Split(nouns, "\n")
+)
 
+func GenPhrase(currentFiles []string) string {
 	var notExists bool
 	var phrase string
 	for !notExists {

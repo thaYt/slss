@@ -46,3 +46,16 @@
         <button type="submit">Login</button>
     </form>
 </main>
+
+<style>
+    h1 {
+        text-align: center;
+        color: #ddd;
+    }
+
+    form {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+</style>

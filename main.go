@@ -96,13 +96,30 @@ func main() {
 				}
 
 				golte.RenderPage(w, r, "page/dashboard", Inputs{
-					"user": user,
+					"user":  user,
+					"files": localFiles,
 				})
 			})
 		})
 
 		r.Route("/upload", func(r chi.Router) {
 			r.Post("/", handleUpload)
+			r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+				auth, err := r.Cookie("slss_token")
+				if err != nil {
+					http.Redirect(w, r, "/login", http.StatusSeeOther)
+					return
+				}
+				user, err := getUserByToken(auth.Value)
+				if err != nil || user.ID == 0 {
+					http.Redirect(w, r, "/login", http.StatusSeeOther)
+					return
+				}
+
+				golte.RenderPage(w, r, "page/upload", Inputs{
+					"user": user,
+				})
+			})
 		})
 
 		r.Route("/{fileId}", func(r chi.Router) {
@@ -115,8 +132,32 @@ func main() {
 					return
 				}
 
+				if strings.Contains(r.UserAgent(), "Discordbot/2.0") &&
+					(strings.HasPrefix(file.Filetype, "image") ||
+						strings.HasPrefix(file.Filetype, "video")) ||
+					r.UserAgent() == "Mozilla/5.0 (Macintosh; Intel Mac OS X 11.6; rv:92.0) Gecko/20100101 Firefox/92.0" {
+					// FUCK, MAN??
+					// People using exactly Intel macs and Firefox 92 are gonna get cucked but fuck it
+					filePath := "./static/" + file.Alias
+
+					a, err := os.Open(filePath)
+					if err != nil {
+						http.Error(w, err.Error(), http.StatusInternalServerError)
+						return
+					}
+					defer a.Close()
+					stat, _ := a.Stat()
+
+					w.Header().Set("Content-Type", file.Filetype)
+					w.Header().Set("Content-Length", fmt.Sprintf("%d", file.Filesize))
+					w.Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", file.Path))
+					http.ServeContent(w, r, file.Path, stat.ModTime(), a)
+					return
+				}
+
 				golte.RenderPage(w, r, "page/view", Inputs{
 					"file": file,
+					"site": config.CurrentSite,
 				})
 			})
 
@@ -127,7 +168,7 @@ func main() {
 						golte.RenderPage(w, r, "page/notfound", nil)
 						return
 					}
-					filePath := "./static/" + file.Path
+					filePath := "./static/" + file.Alias
 
 					a, err := os.Open(filePath)
 					if err != nil {
@@ -158,10 +199,15 @@ func main() {
 					return
 				}
 				token := reqUrl.Query().Get("token")
+				if token == file.Deletetoken {
+					deleteFile(file.ID)
+					w.Write([]byte("File deleted"))
+					return
+				}
 
 				auth := r.Header.Get("Authorization")
 				user, err := getUserByToken(auth)
-				if err != nil || (user.ID != file.UserID && user.ID != 1) || token != file.Deletetoken {
+				if err != nil || (user.ID != file.UserID && user.ID != 1) {
 					http.Error(w, "Unauthorized", http.StatusUnauthorized)
 					return
 				}
@@ -221,7 +267,8 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	f, err := os.OpenFile("./static/"+handler.Filename, os.O_WRONLY|os.O_CREATE, 0666)
+	newAlias := sharex.GenPhrase(allAlias())
+	f, err := os.OpenFile("./static/"+newAlias, os.O_WRONLY|os.O_CREATE, 0666)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.Marshal(failureResponse{Error: "Error saving file"})
@@ -236,7 +283,7 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	url := config.CurrentSite + "/" + handler.Filename
+	url := config.CurrentSite + "/" + newAlias
 
 	deleteToken := uuid.New().String()
 	// send json response
@@ -246,7 +293,7 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 		DeleteURL: url + "/delete?token=" + deleteToken,
 	})
 
-	filetype, err := mimetype.DetectFile("./static/" + handler.Filename)
+	filetype, err := mimetype.DetectFile("./static/" + newAlias)
 	if err != nil {
 		log.Println("Error detecting filetype:", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -257,8 +304,6 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 	if filetype.Extension() == "wav" {
 		ftype = "audio/wav"
 	}
-
-	newAlias := sharex.GenPhrase(allAlias())
 
 	createFile(database.File{
 		Alias:       newAlias,
@@ -278,7 +323,9 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 		nameStr := "User"
 		sizeStr := "Filesize"
 		typeStr := "Filetype"
-		delUrl := "[Delete](" + (config.CurrentSite + "/" + newAlias + "/delete?token=" + deleteToken) + ")"
+		delUrl := config.CurrentSite + "/" + newAlias + "/delete?token=" + deleteToken
+		delStr := "Delete"
+		raw := url + "/raw"
 
 		message := discordwebhook.Embed{
 			Title: &content,
@@ -297,7 +344,8 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 					Value: &bytesize,
 				},
 				{
-					Name: &delUrl,
+					Name:  &delStr,
+					Value: &delUrl,
 				},
 			},
 			Footer: &discordwebhook.Footer{
@@ -307,7 +355,7 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 
 		if strings.HasPrefix(filetype.String(), "image") {
 			message.Image = &discordwebhook.Image{
-				Url: &url,
+				Url: &raw,
 			}
 		}
 

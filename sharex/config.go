@@ -6,7 +6,7 @@ const template string = `{
   "Version": "14.0.0",
   "DestinationType": "ImageUploader, TextUploader, FileUploader",
   "RequestMethod": "POST",
-  "RequestURL": "https://%SITE%/upload",
+  "RequestURL": "%SITE%/upload",
   "Headers": {
 	"Authorization": "%AUTH%"
   },
