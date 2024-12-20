@@ -7,3 +7,10 @@ sql:
       go:
         package: "sql"
         out: "."
+  # - engine: "mysql"
+  #   queries: "query_mysql.sql"
+  #   schema: "schema_mysql.sql"
+  #   gen:
+  #     go:
+  #       package: "mysql"
+  #       out: "mysql"

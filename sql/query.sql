@@ -71,6 +71,10 @@ RETURNING *;
 DELETE FROM files
 WHERE id = ?;
 
+-- name: DeleteFileByAlias :exec
+DELETE FROM files
+WHERE alias = ?;
+
 -- name: GetFileByAlias :one
 SELECT *
 FROM files

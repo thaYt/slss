@@ -1,4 +1,4 @@
-package main
+package db
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	_ "embed"
+	"slss/config"
 	"slss/sharex"
 	database "slss/sql"
 
@@ -17,11 +18,10 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-//go:embed sql/schema.sql
-var ddl string
+var DDL string
 
 func GenConfig(user database.User) string {
-	return sharex.GenConfig(config.CurrentSite, user.Token)
+	return sharex.GenConfig(config.Cfg.CurrentSite, user.Token)
 }
 
 var (
@@ -31,51 +31,78 @@ var (
 )
 
 var (
-	localUsers []database.User
-	localFiles []database.File
+	LocalUsers []database.User
+	LocalFiles []database.File
 )
 
-func initSqlite() error {
-	var err error
-	db, err = sql.Open("sqlite3", config.DbPath+"?mode=rwc&cache=shared")
-	if err != nil {
-		return err
+func Init() {
+	switch config.Cfg.ConnectionMethod {
+	case "sqlite":
+		if err := initSqlite(); err != nil {
+			panic(err)
+		}
+	/*case "mysql":
+	if err := initMySQL(); err != nil {
+		panic(err)
+	}*/
+	default:
+		panic("Unsupported connection method: " + config.Cfg.ConnectionMethod)
 	}
 
 	db.SetMaxOpenConns(1)
 
 	// create tables
-	if _, err := db.ExecContext(ctx, ddl); err != nil {
-		return err
+	if _, err := db.ExecContext(ctx, DDL); err != nil {
+		fmt.Println(DDL)
+		panic(err)
 	}
 
 	queries = database.New(db)
+}
+
+func initSqlite() error {
+	var err error
+	db, err = sql.Open("sqlite3", config.Cfg.DbPath+"?mode=rwc&cache=shared")
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
-func fillFromSql() {
+/*func initMySQL() error {
+	var err error
+	db, err = sql.Open("mysql", config.Cfg.MySQL.Username+":"+config.Cfg.MySQL.Password+"@tcp("+config.Cfg.MySQL.Host+":"+fmt.Sprint(config.Cfg.MySQL.Port)+")/"+config.Cfg.MySQL.Database)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}*/
+
+func FillFromSql() {
 	files, err := GetFiles()
 	if err != nil {
 		return
 	}
 
-	localFiles = files
+	LocalFiles = files
 
-	users, err := listUsers()
+	users, err := ListUsers()
 	if err != nil {
 		return
 	}
 
-	localUsers = users
+	LocalUsers = users
 }
 
-func fillToSql() error {
+func FillToSql() error {
 	// check if files are in the database
 	dbFiles, err := GetFiles()
 	if err != nil {
 		return err
 	}
-	for _, file := range localFiles {
+	for _, file := range LocalFiles {
 		inc := false
 		for _, dbFile := range dbFiles {
 			if file.Path == dbFile.Path {
@@ -83,17 +110,17 @@ func fillToSql() error {
 				break
 			}
 
-			createFile(file)
+			CreateFile(file)
 		}
 		if inc {
 			break
 		}
 	}
-	dbUsers, err := listUsers()
+	dbUsers, err := ListUsers()
 	if err != nil {
 		return err
 	}
-	for _, user := range localUsers {
+	for _, user := range LocalUsers {
 		inc := false
 		for _, dbUser := range dbUsers {
 			if user.Username == dbUser.Username {
@@ -101,7 +128,7 @@ func fillToSql() error {
 				break
 			}
 
-			createUser(user)
+			CreateUser(user)
 		}
 		if inc {
 			break
@@ -110,7 +137,7 @@ func fillToSql() error {
 	return nil
 }
 
-func closeSqlite() {
+func CloseSqlite() {
 	db.Close()
 }
 
@@ -123,7 +150,7 @@ func GetFiles() ([]database.File, error) {
 	return files, nil
 }
 
-func createFile(file database.File) error {
+func CreateFile(file database.File) error {
 	file, err := queries.CreateFile(ctx, database.CreateFileParams{
 		Alias:       file.Alias,
 		Path:        file.Path,
@@ -136,27 +163,32 @@ func createFile(file database.File) error {
 		return err
 	}
 
-	localFiles = append(localFiles, file)
+	LocalFiles = append(LocalFiles, file)
 	return nil
 }
 
-func deleteFile(id int64) error {
-	for i, file := range localFiles {
-		if file.ID == id {
-			os.Remove(filepath.Join(config.StoragePath, "./static/" + file.Alias))
-			localFiles = append(localFiles[:i], localFiles[i+1:]...)
-			err := queries.DeleteFile(ctx, id)
-			if err != nil {
-				return err
-			}
+func DeleteFile(file database.File) error {
+	err := queries.DeleteFile(ctx, file.ID)
+	if err != nil {
+		return err
+	}
+
+	for i, f := range LocalFiles {
+		if f.Alias == file.Alias {
+			LocalFiles = append(LocalFiles[:i], LocalFiles[i+1:]...)
 			break
 		}
 	}
 
-	return nil
+	fp := filepath.Join(config.Cfg.StoragePath, file.Alias)
+	if fp == filepath.Join(config.Cfg.StoragePath) {
+		return nil
+	}
+
+	return os.Remove(filepath.Join(config.Cfg.StoragePath, file.Alias))
 }
 
-func listUsers() ([]database.User, error) {
+func ListUsers() ([]database.User, error) {
 	users, err := queries.ListUsers(ctx)
 	if err != nil {
 		return nil, err
@@ -165,7 +197,7 @@ func listUsers() ([]database.User, error) {
 	return users, nil
 }
 
-func createUser(user database.User) error {
+func CreateUser(user database.User) error {
 	user, err := queries.CreateUser(ctx, database.CreateUserParams{
 		Username: user.Username,
 		Password: user.Password,
@@ -175,26 +207,25 @@ func createUser(user database.User) error {
 		return err
 	}
 
-	localUsers = append(localUsers, user)
+	LocalUsers = append(LocalUsers, user)
 	return nil
 }
 
-func initAdmin() {
-	if len(localUsers) == 0 {
+func InitAdmin() {
+	if len(LocalUsers) == 0 {
 		newUuid := uuid.NewString()
-		fmt.Println("Generated UUID for admin user:", newUuid)
 		admin := database.User{
 			Username: "admin",
-			Password: config.DefaultAdminPassword,
+			Password: config.Cfg.DefaultAdminPassword,
 			Token:    newUuid,
 		}
 
-		createUser(admin)
+		CreateUser(admin)
 	}
 }
 
-func getUserByToken(token string) (database.User, error) {
-	for _, user := range localUsers {
+func GetUserByToken(token string) (database.User, error) {
+	for _, user := range LocalUsers {
 		if user.Token == token {
 			return user, nil
 		}
@@ -203,8 +234,8 @@ func getUserByToken(token string) (database.User, error) {
 	return database.User{}, nil
 }
 
-func getUserByUsername(username string) (database.User, error) {
-	for _, user := range localUsers {
+func GetUserByUsername(username string) (database.User, error) {
+	for _, user := range LocalUsers {
 		if user.Username == username {
 			return user, nil
 		}
@@ -213,8 +244,8 @@ func getUserByUsername(username string) (database.User, error) {
 	return database.User{}, nil
 }
 
-func getFileByAlias(alias string) (database.File, error) {
-	for _, file := range localFiles {
+func GetFileByAlias(alias string) (database.File, error) {
+	for _, file := range LocalFiles {
 		if file.Alias == alias {
 			return file, nil
 		}
@@ -223,8 +254,8 @@ func getFileByAlias(alias string) (database.File, error) {
 	return database.File{}, nil
 }
 
-func getFileByPathname(path string) (database.File, error) {
-	for _, file := range localFiles {
+func GetFileByPathname(path string) (database.File, error) {
+	for _, file := range LocalFiles {
 		if file.Path == path {
 			return file, nil
 		}
@@ -233,14 +264,14 @@ func getFileByPathname(path string) (database.File, error) {
 	return database.File{}, nil
 }
 
-func fillStaticFiles() {
-	dir, _ := os.ReadDir(config.StoragePath)
+func FillStaticFiles() {
+	dir, _ := os.ReadDir(config.Cfg.StoragePath)
 	for _, file := range dir {
 		if file.IsDir() {
 			continue
 		}
 
-		lFile := fileFromOsFile(file)
+		lFile := FileFromOsFile(file)
 
 		dbFiles, err := GetFiles()
 		if err != nil {
@@ -258,14 +289,14 @@ func fillStaticFiles() {
 			continue
 		}
 
-		if createFile(lFile) != nil {
+		if CreateFile(lFile) != nil {
 			// fuck
 		}
 	}
 }
 
-func fileFromOsFile(file fs.DirEntry) database.File {
-	data, err := os.Open(filepath.Join(config.StoragePath, file.Name()))
+func FileFromOsFile(file fs.DirEntry) database.File {
+	data, err := os.Open(filepath.Join(config.Cfg.StoragePath, file.Name()))
 	if err != nil {
 		return database.File{}
 	}
@@ -278,8 +309,13 @@ func fileFromOsFile(file fs.DirEntry) database.File {
 
 	stat, _ := data.Stat()
 
+	var fileNames []string
+	for _, file := range LocalFiles {
+		fileNames = append(fileNames, file.Alias)
+	}
+
 	return database.File{
-		Alias:    "TODO",
+		Alias:    sharex.GenPhrase(fileNames),
 		Path:     file.Name(),
 		Filetype: filetype.String(),
 		Filesize: stat.Size(),

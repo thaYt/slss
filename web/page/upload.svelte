@@ -1,12 +1,14 @@
 <script>
+    import Button from "./lib/Button.svelte";
+
     let file;
     export let user;
+    export let maxFilesize;
 
     async function handleSubmit(event) {
         event.preventDefault();
         const formData = new FormData();
         formData.append("file", file[0]);
-        console.log("Uploading file:", file);
 
         try {
             const response = await fetch("/upload", {
@@ -20,8 +22,11 @@
             if (response.ok) {
                 const data = await response.json();
                 window.location.href = data.url;
+                if (data.error) {
+                    alert(data.error);
+                }
             } else {
-                alert("Unauthorized.");
+                console.error("Error:", response);
             }
         } catch (error) {
             console.error("Error:", error);
@@ -30,9 +35,15 @@
     }
 </script>
 
-<form on:submit={handleSubmit}>
+<svelte:head>
+    <title>slss &bull; upload</title>
+</svelte:head>
+
+<p>max filesize: {maxFilesize}mb</p>
+
+<form on:submit|preventDefault={handleSubmit}>
     <input type="file" bind:files={file} />
-    <button type="submit">Upload</button>
+    <Button type="submit" text="Upload"></Button>
 </form>
 
 <style>
@@ -43,22 +54,5 @@
     }
     input[type="file"] {
         margin-bottom: 10px;
-    }
-    button {
-        padding: 10px 20px;
-        background-color: #333;
-        color: white;
-        border: none;
-        border-radius: 5px;
-        cursor: pointer;
-    }
-    button:hover {
-        background-color: #555;
-    }
-    button:active {
-        background-color: #777;
-    }
-    button:focus {
-        outline: none;
     }
 </style>

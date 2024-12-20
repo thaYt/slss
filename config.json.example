@@ -5,6 +5,7 @@
     "db_path": "./slss.db",
     "storage_path": "./static",
     "port": 8000,
+    "upload_limit": 500,
     "webhook": {
         "enabled": true
     }

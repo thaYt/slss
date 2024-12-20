@@ -1,10 +1,11 @@
 <script>
+    import Button from "./lib/Button.svelte";
+
     let username = "";
     let password = "";
 
+    let error = "";
     function handleSubmit() {
-        console.log("Requesting login with username:", username);
-        // post request to login endpoint
         fetch("/login", {
             method: "POST",
             headers: {
@@ -18,37 +19,62 @@
                 }
                 return res.json();
             })
-            .then((data) => {
-                if (data.success) {
-                    console.log("Login successful");
-                    // window.location.href = "/dashboard";
-                    window.location.href = "/sharex-config";
-                } else {
-                    alert(data.error);
-                }
+            .then(() => {
+                const urlParams = new URLSearchParams(window.location.search);
+                const returnUrl = urlParams.get("return");
+                window.location.href = returnUrl ? returnUrl : "/dashboard";
             })
             .catch((err) => {
-                console.error("Network error:", err);
-                alert(
-                    "An error occurred while trying to log in. Please try again later.",
-                );
+                if (err.status === 401) {
+                    error = "invalid username or password";
+                } else {
+                    error = "an error occurred while logging in";
+                }
             });
     }
 </script>
 
-<main>
-    <h1>Login</h1>
-    <form on:submit|preventDefault={handleSubmit}>
-        <label for="username">Username:</label>
-        <input type="text" id="username" bind:value={username} />
-        <label for="password">Password:</label>
-        <input type="password" id="password" bind:value={password} />
-        <button type="submit">Login</button>
-    </form>
-</main>
+<svelte:head>
+    <title>slss &bull; login</title>
+</svelte:head>
+
+<body>
+    {#if error}
+        <div
+            class="fail"
+            role="button"
+            tabindex="0"
+            on:click={() => (error = "")}
+            on:keypress={() => (error = "")}
+        >
+            <div class="pane">
+                <p>{error}</p>
+                <Button text="Okay" on:click={() => (error = "")} />
+            </div>
+        </div>
+    {:else}
+        <h1>Login</h1>
+        <form on:submit|preventDefault={handleSubmit}>
+            <label for="username">Username:</label>
+            <input type="text" id="username" bind:value={username} />
+            <label for="password">Password:</label>
+            <input type="password" id="password" bind:value={password} />
+            <Button type="submit" text="Login"></Button>
+        </form>
+    {/if}
+</body>
 
 <style>
-    h1 {
+    body {
+        width: 100vw;
+        height: 100vh;
+        margin: 0px;
+        padding: 0px;
+    }
+
+    h1,
+    p,
+    label {
         text-align: center;
         color: #ddd;
     }
@@ -57,5 +83,34 @@
         display: flex;
         flex-direction: column;
         align-items: center;
+    }
+
+    .fail {
+        width: 100vw;
+        height: 100vh;
+        top: 0px;
+        left: 0px;
+        background-color: #0005;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin: 0;
+        padding: 0;
+    }
+
+    .pane {
+        background-color: #333;
+        padding: 20px;
+        border-radius: 5px;
+    }
+
+    input {
+        background-color: #3333;
+        color: #ddd;
+        border-color: #333;
+        border-style: solid;
+        border-radius: 5px;
+        padding: 5px;
+        margin-bottom: 10px;
     }
 </style>

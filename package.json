@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "scripts": {
     "dev": "yarn build:db && golte dev && go build -v",
-    "build": "yarn build:db && golte prod && go build -v",
+    "build": "yarn build:db && golte prod && go build -v && strip slss",
     "build:db": "cd sql && sqlc generate",
     "clean": "trash build"
   },

@@ -17,6 +17,9 @@
         "port": {
             "type": "integer"
         },
+        "upload_limit": {
+            "type": "integer"
+        },
         "webhook": {
             "type": "object",
             "properties": {
@@ -36,6 +39,6 @@
             "required": ["enabled"]
         }
     },
-    "required": ["current_site", "default_admin_password", "db_path", "storage_path", "port", "webhook"]
+    "required": ["current_site", "default_admin_password", "db_path", "storage_path", "port", "upload_limit", "webhook"]
 
 }

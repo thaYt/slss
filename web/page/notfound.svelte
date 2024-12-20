@@ -1,5 +1,9 @@
+<svelte:head>
+    <title>slss &bull; not found</title>
+</svelte:head>
+
 <div class="container">
-    <h1>404 - File Not Found</h1>
+    <h1>404 - file not found</h1>
 </div>
 
 <style>

@@ -1,6 +1,5 @@
 <script>
     import bytes from "bytes";
-    import { onMount } from "svelte";
 
     export let file;
     export let site;
@@ -10,15 +9,12 @@
     let size = file.Filesize;
     let originalName = file.Path;
     let src = name + "/raw";
-
-    onMount(() => {
-        document.title = name + " - slss";
-    });
 </script>
 
 <svelte:head>
+    <title>{originalName} &bull; slss</title>
     <meta name="theme-color" content="#8800aa" />
-    <meta property="og:title" content={name} />
+    <meta property="og:title" content={originalName} />
     <meta property="og:description" content="{type} - {bytes.format(size)}" />
     {#if type.startsWith("image")}
         <meta property="og:type" content="image" />
@@ -30,7 +26,7 @@
 </svelte:head>
 
 <div class="panel">
-    <h1 id="name">{name} ({originalName})</h1>
+    <h1 id="name">{originalName}</h1>
     <p>{bytes.format(size)}</p>
     {#if type.startsWith("image")}
         <img {src} alt={name} class="responsive-media" />

@@ -1,18 +1,26 @@
 <script>
     export let user;
     export let files;
+
+    import "../layout/main.svelte";
+    import "../layout/main.css";
+    import bytes from "bytes";
 </script>
+
+<svelte:head>
+    <title>slss &bull; dashboard ({user.Username})</title>
+</svelte:head>
 
 <body>
     <div class="header">
-        <h1>Dashboard</h1>
+        <h1>slss</h1>
+
+        <h2>{user.Username}</h2>
+
         <a href="/logout">Logout</a>
     </div>
 
     <main>
-        <h2>Welcome, {user.Username}!</h2>
-        <p>Here you can upload files to share with others.</p>
-
         <a href="/upload"><button>Upload File</button></a>
 
         File list:
@@ -20,7 +28,9 @@
             {#each files as file}
                 <li>
                     <a href={file.Alias} target="_blank"
-                        >{file.Path} ({file.Type}, {file.Size})</a
+                        >{file.Path} ({file.Filetype}, {bytes.format(
+                            file.Filesize,
+                        )})</a
                     >
                 </li>
             {/each}
@@ -30,23 +40,31 @@
 
 <style>
     body {
-        width: 100%;
-        height: 100%;
+        width: 100vw;
+        height: 100vh;
+        margin: 0px;
+        padding: 0px;
     }
 
     .header {
         display: flex;
+        width: 100vw;
         justify-content: space-between;
         align-items: center;
-        padding: 10px 20px;
         background-color: #333;
         color: white;
     }
-    h1 {
+
+    h1,
+    h2 {
         margin: 0;
     }
-    a,
-    p {
+
+    h2 {
+        align-self: right;
+    }
+
+    a {
         color: white;
         text-decoration: none;
     }
@@ -54,6 +72,4 @@
     h2 {
         color: #ddd;
     }
-
-
 </style>

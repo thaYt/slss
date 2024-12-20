@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"encoding/json"
@@ -14,7 +14,10 @@ type conf struct {
 	DbPath               string  `json:"db_path"`
 	StoragePath          string  `json:"storage_path"`
 	Port                 int     `json:"port"`
+	UploadLimit          int     `json:"upload_limit"` // in mb
+	ConnectionMethod     string  `json:"connection_method"`
 	Webhook              Webhook `json:"webhook"`
+	// MySQL                MySQL   `json:"mysql"`
 }
 
 type Webhook struct {
@@ -24,18 +27,35 @@ type Webhook struct {
 	AvatarUrl string `json:"avatar_url"`
 }
 
-var config conf
+type MySQL struct {
+	Host     string `json:"host"`
+	Port     int    `json:"port"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Database string `json:"database"`
+}
+
+var Cfg conf
 
 func init() {
-	config = conf{
+	Cfg = conf{
 		CurrentSite:          "localhost",
 		DefaultAdminPassword: "admin",
 		DbPath:               "./slss.db",
 		StoragePath:          "./static",
+		ConnectionMethod:     "sqlite",
 		Port:                 8000,
+		UploadLimit:          20,
 		Webhook: Webhook{
 			Enabled: false,
 		},
+		/*MySQL: MySQL{
+			Host:     "localhost",
+			Port:     3306,
+			Username: "admin",
+			Password: Cfg.DefaultAdminPassword,
+			Database: "slss",
+		},*/
 	}
 
 	file, err := os.ReadFile("config.json")
@@ -44,13 +64,13 @@ func init() {
 		return
 	}
 
-	err = json.Unmarshal(file, &config)
+	err = json.Unmarshal(file, &Cfg)
 	if err != nil {
 		fmt.Println("Error parsing config file:", err)
 		return
 	}
 
-	if err = os.Mkdir(config.StoragePath, 0755); !errors.Is(err, fs.ErrExist) {
+	if err = os.Mkdir(Cfg.StoragePath, 0755); !errors.Is(err, fs.ErrExist) {
 		fmt.Println("Error creating storage directory:", err)
 		return
 	}
